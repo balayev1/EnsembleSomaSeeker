@@ -17,6 +17,10 @@ REF="/projects/standard/aventeic/balay011/references/reference_genome/GRCh38.pri
 ## path to SNP file
 SNP="/projects/standard/aventeic/balay011/.conda/envs/ngscheckmate_env/NGSCheckMate/SNP/SNP_GRCh38_hg38_wChr.bed"
 
+### remove alternative contig lines
+# awk '$1 !~ /_alt$/' "$SNP" > /projects/standard/aventeic/balay011/.conda/envs/ngscheckmate_env/NGSCheckMate/SNP/SNP.no_alt.bed
+UPDATED_SNP="/projects/standard/aventeic/balay011/.conda/envs/ngscheckmate_env/NGSCheckMate/SNP/SNP.no_alt.bed"
+
 ## path to input BAM files
 BAMDIR="/scratch.global/balay011/WGS_skChordomas_Bai/SomaticSNV_calling/work/bwamem"
 
@@ -56,7 +60,7 @@ cat << EOF > "$MPILEUP_SCRIPT"
 # Define Variables
 BAM_LIST_PATH="$BAM_LIST_FILE"
 REF_FASTA="$REF"
-SNP_BED="$SNP"
+SNP_BED="$UPDATED_SNP"
 OUT_BASE_DIR="$WORKDIR/mpileup_out"
 TMP_DIR="$TMPDIR"
 
@@ -71,7 +75,7 @@ echo "Processing Sample: \$SAMPLE_NAME (Task ID: \$SLURM_ARRAY_TASK_ID of $NUM_B
 echo "Sorting BAM file to temporary location: \$TMP_DIR"
 TEMP_SORT_BAM="\$TMP_DIR/\${SAMPLE_NAME}.sorted.bam"
 samtools sort -o "\$TEMP_SORT_BAM" "\$BAM_FILE"
-if [ $? -ne 0 ]; then
+if [ \$? -ne 0 ]; then
     echo "Error: samtools sort failed for \$BAM_FILE"
     exit 1
 fi
@@ -90,11 +94,12 @@ echo "Indexing complete."
 
 # Run samtools mpileup piped to bcftools call
 echo "Starting VCF generation..."
-samtools mpileup \
-    -f "\$REF_FASTA" \
-    -l "\$SNP_BED" \
+bcftools mpileup \
+    --output-type u \
+    --fasta-ref "\$REF_FASTA" \
+    --regions-file "\$SNP_BED" \
     "\$TEMP_SORT_BAM" | \
-    bcftools call -c - > "\$OUT_VCF"
+    bcftools call --consensus-caller --output-type v --output "\$OUT_VCF"
 
 if [ \$? -eq 0 ]; then
     echo "SUCCESS: VCF generation complete for \$SAMPLE_NAME."
@@ -134,7 +139,7 @@ cat << EOF > "$NGSCHECKMATE_SCRIPT"
 #SBATCH --mail-user=balay011@umn.edu
 
 # Define Variables
-SNP_BED="$SNP"
+SNP_BED="$UPDATED_SNP"
 
 VCF_INPUT_DIR="$WORKDIR/mpileup_out"
 OUTPUT_DIR="$WORKDIR/ngscheckmate_out"
@@ -150,8 +155,9 @@ echo "NCM Script Path: \$NCM_SCRIPT_PATH"
 python "\$NCM_SCRIPT_PATH" \
     --VCF \
     --dir \$VCF_INPUT_DIR \
-    --bedfile "\$SNP" \
+    --bedfile "\$SNP_BED" \
     --outdir "\$OUTPUT_DIR" \
+    --family_cutoff \
     --outfilename "ngscheckmate_out"
 
 # Check the exit status of ncm.py
