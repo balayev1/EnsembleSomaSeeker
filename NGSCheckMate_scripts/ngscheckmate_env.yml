@@ -1,0 +1,6 @@
+name: ngscheckmate_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - ngscheckmate=1.0.1=py312pl5321h577a1d6_4
