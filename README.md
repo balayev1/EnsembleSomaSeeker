@@ -1,2 +1,4 @@
 # EnsembleSomaSeeker
-A somatic mutation calling pipeline leveraging ensemble methods for robust and accurate variant detection.
+
+EnsembleSomaSeeker is a somatic mutation calling pipeline that uses BAM/SAM/CRAM files containing reads in tumor-normal pair mode, and identifies somatic mutations using two-step approach. In step I, it takes the reads from tumor-normal sample pair and finds somatic single-nucleotide variants (SNV) and short insertions/deletions (INDEL) using five different mutation-calling software: Mutect2 from GATK package, Strelka2, Varscan2, MuSE and Lofreq. Somatic mutations are then collapsed together using SomaticSeq package. In step 2, EnsembleSomaSeeker selects mutations called by at least two different software and passes them through several hard filtering techniques resulting in the final VCF file per tumor-normal pair. Pipeline can be run on any tumor-normal sample pair in BAM/SAM/CRAM format and is flexible in terms of parameter choice selection for each mutation calling software or filtering options.
+
