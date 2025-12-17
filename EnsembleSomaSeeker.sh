@@ -8,12 +8,12 @@ usage() {
     echo "  -n <file>  : Path to the Normal BAM file."
     echo "  -R <file>  : Path to the Reference Genome FASTA file."
     echo "  -o <dir>   : Output directory for VCF file."
+    echo "  -b <file>  : Path to biallelic VCF file."
     echo ""
     echo "Optional Arguments:"
     echo "  -L <file>  : BED file of coordinates over which to operate."
     echo "  -g <file>  : Germline resource VCF file."
-    echo "-p <file>  : Panel of Normals (PoN) VCF file."
-    echo "  -m         : Flag to enable --mitochondria-mode."
+    echo "  -p <file>  : Panel of Normals (PoN) VCF file."
     echo "  -d <dir>   : Temporary directory to use."
     echo "  -S <id>    : Subject/Patient ID used in vcf file name [default: basename tumor_bam]."
     echo "  -C <int>   : Cores for Mutect2 [default: 1]."
@@ -36,11 +36,11 @@ export LC_ALL=C
 TUMOR_BAM=""
 NORMAL_BAM=""
 REF_GENOME=""
-OUTPUT_DIR="." 
-INTERVALS=""
+OUTPUT_DIR="" 
+BIALLELIC_VCF=""
+INTERVALS_BED=""
 GERMLINE_RESOURCE=""
-PON=""
-MITOCHONDRIA_MODE=0
+PON_FILE=""
 TMP_DIR=""
 SUBJECT_ID=""
 MUTECT2_CORES=1
@@ -50,16 +50,16 @@ VARSCAN2_CORES=1
 LOFREQ_CORES=1
 
 ## getopts processes the script's arguments based on the short options
-while getopts ":t:n:R:o:L:g:p:C:M:S2:V:Lq:md:S:h" option; do
+while getopts ":t:n:R:o:b:L:g:p:C:M:S2:V:Lq:md:S:h" option; do
     case "$option" in
         t) TUMOR_BAM=$OPTARG ;;
         n) NORMAL_BAM=$OPTARG ;;
         R) REF_GENOME=$OPTARG ;;
         o) OUTPUT_DIR=$OPTARG ;;
-        L) INTERVALS=$OPTARG ;;
+        b) BIALLELIC_VCF=$OPTARG ;;
+        L) INTERVALS_BED=$OPTARG ;;
         g) GERMLINE_RESOURCE=$OPTARG ;;
-        p) PON=$OPTARG ;;
-        m) MITOCHONDRIA_MODE=1 ;;
+        p) PON_FILE=$OPTARG ;;
         d) TMP_DIR=$OPTARG ;;
         S) SUBJECT_ID=$OPTARG ;;
         C) MUTECT2_CORES=$OPTARG ;;
@@ -138,33 +138,44 @@ outputdir: "$OUTPUT_DIR"
 tmpdir: "$TMP_DIR"
 subject_id: "$SUBJECT_ID"
 
+rule_cores:
+    mutect2: $MUTECT2_CORES
+    muse: $MUSE_CORES
+    strelka2: $STRELKA2_CORES
+    varscan2: $VARSCAN2_CORES
+    lofreq: $LOFREQ_CORES
+
+
 sample_data:
-  tumor_bam_path: "$TUMOR_BAM"
-  normal_bam_path: "$NORMAL_BAM"
-  tumor_sample_id: "$TUMOR_ID"
-  normal_sample_id: "$NORMAL_ID"
+    tumor_bam_path: "$TUMOR_BAM"
+    normal_bam_path: "$NORMAL_BAM"
+    tumor_sample_id: "$TUMOR_ID"
+    normal_sample_id: "$NORMAL_ID"
 
 mutect2_params:
-  intervals_bed: "$INTERVALS_BED"
-  germline_resource: "$GERMLINE_RESOURCE"
-  panel_of_normals: "$PON_FILE"
-  mitochondria_mode: $MITOCHONDRIA_MODE
-  mutect2_cores: $MUTECT2_CORES
+    intervals_bed: "$INTERVALS_BED"
+    germline_resource: "$GERMLINE_RESOURCE"
+    panel_of_normals: "$PON_FILE"
 
+filter_mutect2_params:
+    biallelic_resource: "$BIALLELIC_VCF"
 EOF
 
-echo "Starting Snakemake pipeline for $SUBJECT_ID..."
+SCRIPT=$(readlink -f "$0")
+export ENSEMBLESOMASEEKER=$(dirname "$SCRIPT")
 
-# The target is the final VCF for the single subject ID
+# Final VCF for the single subject ID
 TARGET_VCF="$OUTPUT_DIR/mutect2_filtered/${SUBJECT_ID}_filtered.vcf.gz"
 
-# Snakemake does not need to handle wildcards/expand since the target is explicit
-snakemake "$TARGET_VCF" \
-    --snakefile "$SNAKEFILE" \
-    --configfile "$CONFIG_FILE" \
-    --cores "$CORES" \
-    --use-conda \
-    -p # Print shell commands
+echo "Running snakemake pipeline:"
+command="snakemake $TARGET_VCF \
+    --use-conda --conda-prefix $ENSEMBLESOMASEEKER/envs/conda \
+    --cores 1 --configfile $CONFIG \
+    --snakefile $ENSEMBLESOMASEEKER/Snakefile -p"
+
+echo -e $command
+
+eval $command
 
 
 # --- 3. Cleanup ---
