@@ -173,6 +173,8 @@ then
     exit 1
 fi
 
+## Remove any trailing slashes from output directory
+OUTPUT_DIR=$(echo "$OUTPUT_DIR" | sed 's:/*$::')
 
 ## Define subject ID if not specified
 if [ -z "$SUBJECT_ID" ]; then

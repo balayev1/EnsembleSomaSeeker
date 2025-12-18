@@ -36,7 +36,9 @@ rule mutect2:
              if config.get('tmpdir') else "")
         )
     shell:
-        """        
+        """
+        mkdir -p {config['outputdir']}/mutect2
+
         gatk Mutect2 \
             -R {input.ref} \
             -I {input.tumor_bam} -tumor {params.tumor_id} \
@@ -67,7 +69,9 @@ rule filter_mutect2:
         read_orientation_table = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}.artifact_prior_tables.tar.gz"),
         filtered_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
     shell:
-        """        
+        """       
+        mkdir -p {config['outputdir']}/mutect2_filtered
+
         gatk GetPileupSummaries \
             -I {input.tumor_bam} \
             -L {input.biallelic_resource} \
@@ -110,6 +114,8 @@ rule prepare_strelka_bed:
         tbi = f"{config['outputdir']}/strelka2/intervals.bed.gz.tbi"
     shell:
         """
+        mkdir -p {config['outputdir']}/strelka2
+
         if [[ "{input.bed}" == *.gz ]]; then
             cp {input.bed} {output.gz}
         else
@@ -144,6 +150,8 @@ rule strelka2:
         """        
         rm -rf {output.run_dir}
 
+        mkdir -p {output.run_dir}
+
         python2 configureStrelkaSomaticWorkflow.py \
             --tumorBam {input.tumor_bam} \
             --normalBam {input.normal_bam} \
@@ -177,7 +185,9 @@ rule varscan2:
              if config.get('intervals_bed') else "")
         )
     shell:
-        """        
+        """   
+        mkdir -p {config['outputdir']}/varscan2
+
         samtools mpileup \
             --no-BAQ \
             --min-MQ 1 \
@@ -212,7 +222,9 @@ rule muse:
         dbsnp = (f" -D {config.get('dbsnp_resource')}" 
                  if config.get('dbsnp_resource') else "")
     shell:
-        """        
+        """  
+        mkdir -p {config['outputdir']}/muse
+
         MuSE call \
             -f {input.ref} \
             -O {params.prefix} \
@@ -255,6 +267,8 @@ rule lofreq:
         )
     shell:
         """        
+        mkdir -p {config['outputdir']}/lofreq
+
         lofreq indelqual \
             --dindel \
             --ref {input.ref} \
@@ -317,6 +331,8 @@ rule somaticseq:
         )
     shell:
         """
+        mkdir -p {config['outputdir']}/somaticseq/{config['subject_id']}
+        
         somaticseq_parallel.py paired \
             --tumor-bam-file {input.tumor_bam} \
             --normal-bam-file {input.normal_bam} \
