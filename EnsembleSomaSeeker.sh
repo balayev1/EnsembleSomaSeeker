@@ -18,6 +18,7 @@ usage() {
     echo "  -Co <file> : Path to COSMIC VCF file (used only for SomaticSeq)."
     echo "  -d <dir>   : Temporary directory to use."
     echo "  -S <id>    : Subject/Patient ID used in vcf file name [default: basename tumor_bam]."
+    echo "  -Sn <int>  : Cores for snakemake run [default: 1]."
     echo "  -C <int>   : Cores for Mutect2 [default: 1]."
     echo "  -M <int>   : Cores for MuSE [default: 1]."
     echo "  -S2 <int>  : Cores for Strelka2 [default: 1]."
@@ -48,6 +49,7 @@ DBSNP_FILE=""
 COSMIC_FILE=""
 TMP_DIR=""
 SUBJECT_ID=""
+SNAKEMAKE_CORES=1
 MUTECT2_CORES=1
 MUSE_CORES=1
 STRELKA2_CORES=1
@@ -56,7 +58,7 @@ LOFREQ_CORES=1
 SOMATICSEQ_CORES=1
 
 ## getopts processes the script's arguments based on the short options
-while getopts ":t:n:R:o:b:L:g:p:s:Co:C:M:S2:V:Lq:F:md:S:h" option; do
+while getopts ":t:n:R:o:b:L:g:p:s:Co:Sn:C:M:S2:V:Lq:F:md:S:h" option; do
     case "$option" in
         t) TUMOR_BAM=$OPTARG ;;
         n) NORMAL_BAM=$OPTARG ;;
@@ -70,6 +72,7 @@ while getopts ":t:n:R:o:b:L:g:p:s:Co:C:M:S2:V:Lq:F:md:S:h" option; do
         Co) COSMIC_FILE=$OPTARG ;;
         d) TMP_DIR=$OPTARG ;;
         S) SUBJECT_ID=$OPTARG ;;
+        Sn) SNAKEMAKE_CORES=$OPTARG ;;
         C) MUTECT2_CORES=$OPTARG ;;
         M) MUSE_CORES=$OPTARG ;;
         S2) STRELKA2_CORES=$OPTARG ;;
@@ -224,7 +227,7 @@ TARGET_INDEL_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sINDEL.vcf"
 echo "Running snakemake pipeline:"
 command="snakemake $TARGET_SNV_VCF $TARGET_INDEL_VCF \
     --use-conda --conda-prefix $ENSEMBLESOMASEEKER/envs/conda \
-    --cores 1 --configfile $CONFIG_FILE \
+    --cores $SNAKEMAKE_CORES --configfile $CONFIG_FILE \
     --snakefile $ENSEMBLESOMASEEKER/Snakefile -p"
 
 echo -e $command
