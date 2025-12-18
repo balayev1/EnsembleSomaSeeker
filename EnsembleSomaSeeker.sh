@@ -132,6 +132,16 @@ then
     exit 1
 fi
 
+if [ -z "$BIALLELIC_VCF" ]
+then
+    echo "No biallelic VCF file $BIALLELIC_VCF for Mutect2 specified."
+    exit 1
+elif [ ! -f "$BIALLELIC_VCF" ]
+then
+    echo "Biallelic VCF file $BIALLELIC_VCF for Mutect2 does not exist."
+    exit 1
+fi
+
 ## Validate optional file arguments if not empty
 if [ ! -z "$INTERVALS_BED" ] && [ ! -f "$INTERVALS_BED" ]
 then
@@ -163,11 +173,6 @@ then
     exit 1
 fi
 
-if [ ! -z "$BIALLELIC_VCF" ] && [ ! -f "$BIALLELIC_VCF" ]
-then
-    echo "Biallelic VCF file $BIALLELIC_VCF for Mutect2 specified but does not exist."
-    exit 1
-fi
 
 ## Define subject ID if not specified
 if [ -z "$SUBJECT_ID" ]; then
@@ -178,8 +183,12 @@ fi
 TUMOR_ID=$(basename "${TUMOR_BAM%.*}")
 NORMAL_ID=$(basename "${NORMAL_BAM%.*}")
 
+## Define current path
+SCRIPT=$(readlink -f "$0")
+export ENSEMBLESOMASEEKER=$(dirname "$SCRIPT")
+
 ## Define path to config file
-CONFIG_FILE="$OUTPUT_DIR/config_${SUBJECT_ID}.yaml"
+CONFIG_FILE="$ENSEMBLESOMASEEKER/config_${SUBJECT_ID}.yaml"
 
 echo "Generating temporary configuration file: $CONFIG_FILE"
 cat > "$CONFIG_FILE" << EOF
@@ -217,10 +226,7 @@ filter_mutect2_params:
     biallelic_resource: "$BIALLELIC_VCF"
 EOF
 
-SCRIPT=$(readlink -f "$0")
-export ENSEMBLESOMASEEKER=$(dirname "$SCRIPT")
-
-# Final VCF for the single subject ID
+# Final VCFs for subject ID
 TARGET_SNV_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sSNV.vcf"
 TARGET_INDEL_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sINDEL.vcf"
 
