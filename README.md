@@ -25,7 +25,11 @@ Now, we are ready for test run:
 bash EnsembleSomaSeeker.sh \
     -t test/SRR14097759_sorted_MD_BQ_chr1_1000000.bam \
     -n test/SRR14097760_sorted_MD_BQ_chr1_1000000.bam \
+    -T SRR14097759 \
+    -N SRR14097760 \
     -R data/GRCh38.primary_assembly.genome.fa \
-    -o test \
-    -b data/common_all_biallelic.vcf.gz
+    -o test/ \
+    -b data/common_all_biallelic.vcf.gz \
+    -M 8 \
+    -Sn 8
 ```

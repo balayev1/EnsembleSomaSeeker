@@ -21,10 +21,11 @@ rule mutect2:
         unfiltered_vcf = f"{config['outputdir']}/mutect2/{config['subject_id']}_unfiltered.vcf.gz",
         f1r2 = f"{config['outputdir']}/mutect2/{config['subject_id']}.f1r2.tar.gz",
     params:
+        # Move directory logic here
+        out_dir = f"{config['outputdir']}/mutect2",
         tmpdir = config.get("tmpdir"),
         tumor_id = config["sample_data"]["tumor_sample_id"],
         normal_id = config["sample_data"]["normal_sample_id"],
-
         optional_args = (
             (f" --intervals {config.get('intervals_bed')} --interval-padding 0" 
              if config.get('intervals_bed') else "") +
@@ -36,8 +37,8 @@ rule mutect2:
              if config.get('tmpdir') else "")
         )
     shell:
-        """
-        mkdir -p {config['outputdir']}/mutect2
+        """        
+        mkdir -p {params.out_dir}
 
         gatk Mutect2 \
             -R {input.ref} \
@@ -179,14 +180,13 @@ rule varscan2:
         snvs = f"{config['outputdir']}/varscan2/{config['subject_id']}.snp.vcf",
         indels = f"{config['outputdir']}/varscan2/{config['subject_id']}.indel.vcf",
     params:
+        # Move directory and prefix here
+        out_dir = f"{config['outputdir']}/varscan2",
         prefix = f"{config['outputdir']}/varscan2/{config['subject_id']}",
-        optional_args = (
-            (f" -l {config.get('intervals_bed')}" 
-             if config.get('intervals_bed') else "")
-        )
+        optional_args = (f" -l {config.get('intervals_bed')}" if config.get('intervals_bed') else "")
     shell:
-        """   
-        mkdir -p {config['outputdir']}/varscan2
+        """
+        mkdir -p {params.out_dir}
 
         samtools mpileup \
             --no-BAQ \
@@ -210,7 +210,7 @@ rule muse:
         "envs/muse_ensemblesomaseeker.yaml"
     threads:
         config['rule_cores'].get('muse', 2)
-    input: 
+    input:
         ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
@@ -218,12 +218,13 @@ rule muse:
         muse_txt = temp(f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.txt"),
         target_vcf = f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf"
     params:
+        out_dir = f"{config['outputdir']}/muse",
         prefix = f"{config['outputdir']}/muse/{config['subject_id']}",
         dbsnp = (f" -D {config.get('dbsnp_resource')}" 
                  if config.get('dbsnp_resource') else "")
     shell:
-        """  
-        mkdir -p {config['outputdir']}/muse
+        """
+        mkdir -p {params.out_dir}
 
         MuSE call \
             -f {input.ref} \
@@ -231,7 +232,7 @@ rule muse:
             -n {threads} \
             {input.tumor_bam} \
             {input.normal_bam}
-        
+
         MuSE sump \
             -I {params.prefix}.MuSE.txt \
             -O {output.target_vcf} \
@@ -258,6 +259,8 @@ rule lofreq:
         snvs = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.snvs.vcf.gz",
         indels = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.indels.vcf.gz",
     params:
+        # Move directory logic here
+        out_dir = f"{config['outputdir']}/lofreq",
         prefix = f"{config['outputdir']}/lofreq/{config['subject_id']}_",
         optional_args = (
             (f" --bed {config.get('intervals_bed')}" 
@@ -267,7 +270,7 @@ rule lofreq:
         )
     shell:
         """        
-        mkdir -p {config['outputdir']}/lofreq
+        mkdir -p {params.out_dir}
 
         lofreq indelqual \
             --dindel \
@@ -332,7 +335,7 @@ rule somaticseq:
     shell:
         """
         mkdir -p {config['outputdir']}/somaticseq/{config['subject_id']}
-        
+
         somaticseq_parallel.py paired \
             --tumor-bam-file {input.tumor_bam} \
             --normal-bam-file {input.normal_bam} \

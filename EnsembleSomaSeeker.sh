@@ -6,6 +6,8 @@ usage() {
     echo "Required Arguments:"
     echo "  -t <file>  : Path to the Tumor BAM file."
     echo "  -n <file>  : Path to the Normal BAM file."
+    echo "  -T <id>    : Tumor Sample ID."
+    echo "  -N <id>    : Normal Sample ID."
     echo "  -R <file>  : Path to the Reference Genome FASTA file."
     echo "  -o <dir>   : Output directory for VCF file."
     echo "  -b <file>  : Path to biallelic VCF file."
@@ -15,16 +17,16 @@ usage() {
     echo "  -g <file>  : Path to Germline resource VCF file (used only for Mutect2)."
     echo "  -p <file>  : Path to Panel of Normals (PoN) VCF file (used only for Mutect2)."
     echo "  -s <file>  : Path to dbSNP VCF file."
-    echo "  -Co <file> : Path to COSMIC VCF file (used only for SomaticSeq)."
+    echo "  -v <file>  : Path to COSMIC VCF file (used only for SomaticSeq)."
     echo "  -d <dir>   : Temporary directory to use."
     echo "  -S <id>    : Subject/Patient ID used in vcf file name [default: basename tumor_bam]."
-    echo "  -Sn <int>  : Cores for snakemake run [default: 1]."
+    echo "  -j <int>   : Cores for snakemake run [default: 1]."
     echo "  -C <int>   : Cores for Mutect2 [default: 1]."
     echo "  -M <int>   : Cores for MuSE [default: 1]."
-    echo "  -S2 <int>  : Cores for Strelka2 [default: 1]."
+    echo "  -K <int>   : Cores for Strelka2 [default: 1]."
     echo "  -V <int>   : Cores for VarScan2 [default: 1]."
-    echo "  -Lq <int>  : Cores for Lofreq [default: 1]."
-    echo "  -F  <int>  : Cores for SomaticSeq [default: 1]."
+    echo "  -Q <int>   : Cores for Lofreq [default: 1]."
+    echo "  -F <int>   : Cores for SomaticSeq [default: 1]."
     echo "  -h         : Show help text."
     exit 1
 }
@@ -36,9 +38,11 @@ unset OPTIND
 ## Set locale to operate on ASCII values for characters (disable UTF8)
 export LC_ALL=C
 
-## Define variables
+## Initialize variables with default values
 TUMOR_BAM=""
 NORMAL_BAM=""
+TUMOR_ID=""
+NORMAL_ID=""
 REF_GENOME=""
 OUTPUT_DIR="" 
 BIALLELIC_VCF=""
@@ -57,11 +61,14 @@ VARSCAN2_CORES=1
 LOFREQ_CORES=1
 SOMATICSEQ_CORES=1
 
-## getopts processes the script's arguments based on the short options
-while getopts ":t:n:R:o:b:L:g:p:s:Co:Sn:C:M:S2:V:Lq:F:md:S:h" option; do
+## Updated getopts string to match the CASE logic below
+# Removed 'c', 'm', 'k', 'q', 'f' and replaced with 'C', 'M', 'K', 'Q', 'F'
+while getopts ":t:n:T:N:R:o:b:L:g:p:s:v:d:S:j:C:M:K:V:Q:F:h" option; do
     case "$option" in
         t) TUMOR_BAM=$OPTARG ;;
         n) NORMAL_BAM=$OPTARG ;;
+        T) TUMOR_ID=$OPTARG ;;
+        N) NORMAL_ID=$OPTARG ;;
         R) REF_GENOME=$OPTARG ;;
         o) OUTPUT_DIR=$OPTARG ;;
         b) BIALLELIC_VCF=$OPTARG ;;
@@ -69,15 +76,15 @@ while getopts ":t:n:R:o:b:L:g:p:s:Co:Sn:C:M:S2:V:Lq:F:md:S:h" option; do
         g) GERMLINE_RESOURCE=$OPTARG ;;
         p) PON_FILE=$OPTARG ;;
         s) DBSNP_FILE=$OPTARG ;;
-        Co) COSMIC_FILE=$OPTARG ;;
+        v) COSMIC_FILE=$OPTARG ;;
         d) TMP_DIR=$OPTARG ;;
         S) SUBJECT_ID=$OPTARG ;;
-        Sn) SNAKEMAKE_CORES=$OPTARG ;;
+        j) SNAKEMAKE_CORES=$OPTARG ;;
         C) MUTECT2_CORES=$OPTARG ;;
         M) MUSE_CORES=$OPTARG ;;
-        S2) STRELKA2_CORES=$OPTARG ;;
+        K) STRELKA2_CORES=$OPTARG ;;
         V) VARSCAN2_CORES=$OPTARG ;;
-        Lq) LOFREQ_CORES=$OPTARG ;;
+        Q) LOFREQ_CORES=$OPTARG ;;
         F) SOMATICSEQ_CORES=$OPTARG ;;
         h) usage ;;
         \?) printf "Error: Illegal option: -%s\n" "$OPTARG" >&2
@@ -86,7 +93,6 @@ while getopts ":t:n:R:o:b:L:g:p:s:Co:Sn:C:M:S2:V:Lq:F:md:S:h" option; do
     esac
 done
 
-## Shifts all arguments processed by getopts to first argument
 shift $((OPTIND - 1))
 
 set -ueo pipefail
@@ -109,6 +115,18 @@ then
 elif [ ! -f "$NORMAL_BAM" ]
 then
     echo "Normal BAM file $NORMAL_BAM does not exist."
+    exit 1
+fi
+
+if [ -z "$TUMOR_ID" ]
+then
+    echo "No tumor ID specified. To run EnsembleSomaSeeker, tumor ID has to be provided."
+    exit 1
+fi
+
+if [ -z "$NORMAL_ID" ]
+then
+    echo "No normal ID specified. To run EnsembleSomaSeeker, normal ID has to be provided."
     exit 1
 fi
 
@@ -180,10 +198,6 @@ OUTPUT_DIR=$(echo "$OUTPUT_DIR" | sed 's:/*$::')
 if [ -z "$SUBJECT_ID" ]; then
     SUBJECT_ID=$(basename "${TUMOR_BAM%.*}")
 fi
-
-## Define tumor ID and normal ID
-TUMOR_ID=$(basename "${TUMOR_BAM%.*}")
-NORMAL_ID=$(basename "${NORMAL_BAM%.*}")
 
 ## Define current path
 SCRIPT=$(readlink -f "$0")
