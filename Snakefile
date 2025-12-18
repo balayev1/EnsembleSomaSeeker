@@ -3,14 +3,14 @@ Snakefile to identify somatic SNVs and INDELs in single subject/patient in tumor
 """
 
 # Validation of config file
-from snakemake.utils import validate
+# from snakemake.utils import validate
 
-validate(config, schema="schemas/config_schema.yaml")
+# validate(config, schema="schemas/config_schema.yaml")
 
 # MUTECT2 RULE
 rule mutect2:
     conda:
-        "envs/gatk_mutect2.yaml"
+        "envs/mutect2_ensemblesomaseeker.yaml"
     threads:
         config['rule_cores'].get('mutect2', 2)
     input:
@@ -26,8 +26,8 @@ rule mutect2:
         normal_id = config["sample_data"]["normal_sample_id"],
 
         optional_args = (
-            (f" --intervals {config['mutect2_params'].get('intervals_bed')} --interval-padding 0" 
-             if config['mutect2_params'].get('intervals_bed') else "") +
+            (f" --intervals {config.get('intervals_bed')} --interval-padding 0" 
+             if config.get('intervals_bed') else "") +
             (f" --germline-resource {config['mutect2_params'].get('germline_resource')}" 
              if config['mutect2_params'].get('germline_resource') else "") +
             (f" --panel-of-normals {config['mutect2_params'].get('panel_of_normals')}" 
@@ -51,7 +51,7 @@ rule mutect2:
 # FILTER MUTECT2 RULE
 rule filter_mutect2:
     conda:
-        "envs/gatk_mutect2.yaml"
+        "envs/mutect2_ensemblesomaseeker.yaml"
     input:
         ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
@@ -97,4 +97,241 @@ rule filter_mutect2:
             --contamination-table {output.contamination_table} \
             --tumor-segmentation {output.segmentation_table} \
             -O {output.filtered_vcf}
+        """
+
+# PREPARE BED FOR STRELKA2 RULE 
+rule prepare_strelka_bed:
+    conda:
+        "envs/bcftools_ensemblesomaseeker.yaml"
+    input:
+        bed = config.get("intervals_bed", "")
+    output:
+        gz = f"{config['outputdir']}/strelka2/intervals.bed.gz",
+        tbi = f"{config['outputdir']}/strelka2/intervals.bed.gz.tbi"
+    shell:
+        """
+        if [[ "{input.bed}" == *.gz ]]; then
+            cp {input.bed} {output.gz}
+        else
+            bgzip -c {input.bed} > {output.gz}
+        fi
+        
+        tabix -f -p bed {output.gz}
+        """
+
+# STRELKA2 RULE
+rule strelka2:
+    conda:
+        "envs/strelka2_ensemblesomaseeker.yaml"
+    threads:
+        config['rule_cores'].get('strelka2', 2)
+    input:
+        ref = config["reference_genome"],
+        tumor_bam = config["sample_data"]["tumor_bam_path"],
+        normal_bam = config["sample_data"]["normal_bam_path"],
+        prepared_bed = (f"{config['outputdir']}/strelka2/intervals.bed.gz" 
+                        if config.get("intervals_bed") else []),
+    output:
+        snvs = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.snvs.vcf.gz",
+        indels = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.indels.vcf.gz",
+        run_dir = directory(f"{config['outputdir']}/strelka2/{config['subject_id']}"),
+    params:
+        optional_args = (
+            (f" --callRegions {config['outputdir']}/strelka2/intervals.bed.gz" 
+                        if config.get("intervals_bed") else "")
+        )
+    shell:
+        """        
+        rm -rf {output.run_dir}
+
+        python2 configureStrelkaSomaticWorkflow.py \
+            --tumorBam {input.tumor_bam} \
+            --normalBam {input.normal_bam} \
+            --referenceFasta {input.ref} \
+            --runDir {output.run_dir} \
+            {params.optional_args}
+
+        python2 {output.run_dir}/runWorkflow.py \
+            --mode local \
+            --jobs {threads} \
+            --memGb 64
+        """
+
+# VARSCAN2 RULE
+rule varscan2:
+    conda:
+        "envs/varscan2_ensemblesomaseeker.yaml"
+    threads:
+        config['rule_cores'].get('varscan2', 2)
+    input:
+        ref = config["reference_genome"],
+        tumor_bam = config["sample_data"]["tumor_bam_path"],
+        normal_bam = config["sample_data"]["normal_bam_path"],
+    output:
+        snvs = f"{config['outputdir']}/varscan2/{config['subject_id']}.snp.vcf",
+        indels = f"{config['outputdir']}/varscan2/{config['subject_id']}.indel.vcf",
+    params:
+        prefix = f"{config['outputdir']}/varscan2/{config['subject_id']}",
+        optional_args = (
+            (f" -l {config.get('intervals_bed')}" 
+             if config.get('intervals_bed') else "")
+        )
+    shell:
+        """        
+        samtools mpileup \
+            --no-BAQ \
+            --min-MQ 1 \
+            -f {input.ref} \
+            {params.optional_args} \
+            {input.normal_bam} \
+            {input.tumor_bam} | \
+        varscan somatic \
+            - \
+            {params.prefix} \
+            --mpileup 1 \
+            --min-coverage 1 \
+            --min-var-freq 0.001 \
+            --output-vcf 1
+        """
+
+# MUSE RULE
+rule muse:
+    conda:
+        "envs/muse_ensemblesomaseeker.yaml"
+    threads:
+        config['rule_cores'].get('muse', 2)
+    input: 
+        ref = config["reference_genome"],
+        tumor_bam = config["sample_data"]["tumor_bam_path"],
+        normal_bam = config["sample_data"]["normal_bam_path"],
+    output:
+        muse_txt = temp(f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.txt"),
+        target_vcf = f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf"
+    params:
+        prefix = f"{config['outputdir']}/muse/{config['subject_id']}",
+        dbsnp = (f" -D {config.get('dbsnp_resource')}" 
+                 if config.get('dbsnp_resource') else "")
+    shell:
+        """        
+        MuSE call \
+            -f {input.ref} \
+            -O {params.prefix} \
+            -n {threads} \
+            {input.tumor_bam} \
+            {input.normal_bam}
+        
+        MuSE sump \
+            -I {params.prefix}.MuSE.txt \
+            -O {output.target_vcf} \
+            -G \
+            -n {threads} \
+            {params.dbsnp}
+        """
+
+# LOFREQ RULE
+rule lofreq:
+    conda:
+        "envs/lofreq_ensemblesomaseeker.yaml"
+    threads:
+        config['rule_cores'].get('lofreq', 2)
+    input: 
+        ref = config["reference_genome"],
+        tumor_bam = config["sample_data"]["tumor_bam_path"],
+        normal_bam = config["sample_data"]["normal_bam_path"],
+    output:
+        realign_tumor = temp(f"{config['outputdir']}/lofreq/{config['subject_id']}_tumor_BD_BI.bam"),
+        realign_normal = temp(f"{config['outputdir']}/lofreq/{config['subject_id']}_normal_BD_BI.bam"),
+        realign_tumor_bai = temp(f"{config['outputdir']}/lofreq/{config['subject_id']}_tumor_BD_BI.bam.bai"),
+        realign_normal_bai = temp(f"{config['outputdir']}/lofreq/{config['subject_id']}_normal_BD_BI.bam.bai"),
+        snvs = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.snvs.vcf.gz",
+        indels = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.indels.vcf.gz",
+    params:
+        prefix = f"{config['outputdir']}/lofreq/{config['subject_id']}_",
+        optional_args = (
+            (f" --bed {config.get('intervals_bed')}" 
+            if config.get('intervals_bed') else "") +
+            (f" --dbsnp {config.get('dbsnp_resource')}" 
+            if config.get('dbsnp_resource') else "")
+        )
+    shell:
+        """        
+        lofreq indelqual \
+            --dindel \
+            --ref {input.ref} \
+            --out {output.realign_normal} \
+            {input.normal_bam}
+        
+        lofreq indelqual \
+            --dindel \
+            --ref {input.ref} \
+            --out {output.realign_tumor} \
+            {input.tumor_bam}
+        
+        samtools index -o {output.realign_tumor_bai} {output.realign_tumor}
+
+        samtools index -o {output.realign_normal_bai} {output.realign_normal}
+
+        lofreq somatic \
+            --normal {output.realign_normal} \
+            --tumor {output.realign_tumor} \
+            --outprefix {params.prefix} \
+            --ref {input.ref} \
+            --threads {threads} \
+            --call-indels \
+            --min-cov 7 \
+            {params.optional_args}
+        """
+
+# SOMATICSEQ RULE
+rule somaticseq:
+    conda:
+        "envs/somaticseq_ensemblesomaseeker.yaml"
+    threads:
+        config['rule_cores'].get('somaticseq', 2)
+    input: 
+        ref = config["reference_genome"],
+        tumor_bam = config["sample_data"]["tumor_bam_path"],
+        normal_bam = config["sample_data"]["normal_bam_path"],
+        mutect2_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
+        strelka2_snvs = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.snvs.vcf.gz",
+        strelka2_indels = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.indels.vcf.gz",
+        varscan2_snvs = f"{config['outputdir']}/varscan2/{config['subject_id']}.snp.vcf",
+        varscan2_indels = f"{config['outputdir']}/varscan2/{config['subject_id']}.indel.vcf",
+        muse_vcf = f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf",
+        lofreq_snvs = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.snvs.vcf.gz",
+        lofreq_indels = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.indels.vcf.gz",
+    output:
+        snvs_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sSNV.vcf",
+        indels_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sINDEL.vcf",
+        snvs_tsv = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Ensemble.sSNV.tsv",
+        indels_tsv = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Ensemble.sINDEL.tsv",
+    params:
+        prefix = f"{config['outputdir']}/somaticseq/{config['subject_id']}",
+        optional_args = (
+            (f" --inclusion-region {config.get('intervals_bed')}" 
+            if config.get('intervals_bed') else "") +
+            (f" --dbsnp-vcf {config.get('dbsnp_resource')}" 
+            if config.get('dbsnp_resource') else "") +
+            (f" --cosmic-vcf {config.get('cosmic_resource')}" 
+            if config.get('cosmic_resource') else "")
+        )
+    shell:
+        """
+        somaticseq_parallel.py paired \
+            --tumor-bam-file {input.tumor_bam} \
+            --normal-bam-file {input.normal_bam} \
+            --mutect2-vcf {input.mutect2_vcf} \
+            --varscan-snv {input.varscan2_snvs} \
+            --varscan-indel {input.varscan2_indels} \
+            --muse-vcf {input.muse_vcf} \
+            --lofreq-snv {input.lofreq_snvs} \
+            --lofreq-indel {input.lofreq_indels} \
+            --strelka-snv {input.strelka2_snvs} \
+            --strelka-indel {input.strelka2_indels} \
+            --output-directory {params.prefix} \
+            --genome-reference {input.ref} \
+            --threads {threads} \
+            --pass-threshold 0.5 \
+            --lowqual-threshold 0.1 \
+            {params.optional_args}
         """

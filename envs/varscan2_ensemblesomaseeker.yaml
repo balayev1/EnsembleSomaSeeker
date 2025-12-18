@@ -1,0 +1,7 @@
+name: varscan2_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - varscan=2.4.6=hdfd78af_0
+  - samtools=1.22=h96c455f_0

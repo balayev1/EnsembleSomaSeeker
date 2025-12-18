@@ -11,9 +11,11 @@ usage() {
     echo "  -b <file>  : Path to biallelic VCF file."
     echo ""
     echo "Optional Arguments:"
-    echo "  -L <file>  : BED file of coordinates over which to operate."
-    echo "  -g <file>  : Germline resource VCF file."
-    echo "  -p <file>  : Panel of Normals (PoN) VCF file."
+    echo "  -L <file>  : Path to BED file of coordinates over which to operate."
+    echo "  -g <file>  : Path to Germline resource VCF file (used only for Mutect2)."
+    echo "  -p <file>  : Path to Panel of Normals (PoN) VCF file (used only for Mutect2)."
+    echo "  -s <file>  : Path to dbSNP VCF file."
+    echo "  -Co <file> : Path to COSMIC VCF file (used only for SomaticSeq)."
     echo "  -d <dir>   : Temporary directory to use."
     echo "  -S <id>    : Subject/Patient ID used in vcf file name [default: basename tumor_bam]."
     echo "  -C <int>   : Cores for Mutect2 [default: 1]."
@@ -21,6 +23,7 @@ usage() {
     echo "  -S2 <int>  : Cores for Strelka2 [default: 1]."
     echo "  -V <int>   : Cores for VarScan2 [default: 1]."
     echo "  -Lq <int>  : Cores for Lofreq [default: 1]."
+    echo "  -F  <int>  : Cores for SomaticSeq [default: 1]."
     echo "  -h         : Show help text."
     exit 1
 }
@@ -41,6 +44,8 @@ BIALLELIC_VCF=""
 INTERVALS_BED=""
 GERMLINE_RESOURCE=""
 PON_FILE=""
+DBSNP_FILE=""
+COSMIC_FILE=""
 TMP_DIR=""
 SUBJECT_ID=""
 MUTECT2_CORES=1
@@ -48,9 +53,10 @@ MUSE_CORES=1
 STRELKA2_CORES=1
 VARSCAN2_CORES=1
 LOFREQ_CORES=1
+SOMATICSEQ_CORES=1
 
 ## getopts processes the script's arguments based on the short options
-while getopts ":t:n:R:o:b:L:g:p:C:M:S2:V:Lq:md:S:h" option; do
+while getopts ":t:n:R:o:b:L:g:p:s:Co:C:M:S2:V:Lq:F:md:S:h" option; do
     case "$option" in
         t) TUMOR_BAM=$OPTARG ;;
         n) NORMAL_BAM=$OPTARG ;;
@@ -60,6 +66,8 @@ while getopts ":t:n:R:o:b:L:g:p:C:M:S2:V:Lq:md:S:h" option; do
         L) INTERVALS_BED=$OPTARG ;;
         g) GERMLINE_RESOURCE=$OPTARG ;;
         p) PON_FILE=$OPTARG ;;
+        s) DBSNP_FILE=$OPTARG ;;
+        Co) COSMIC_FILE=$OPTARG ;;
         d) TMP_DIR=$OPTARG ;;
         S) SUBJECT_ID=$OPTARG ;;
         C) MUTECT2_CORES=$OPTARG ;;
@@ -67,6 +75,7 @@ while getopts ":t:n:R:o:b:L:g:p:C:M:S2:V:Lq:md:S:h" option; do
         S2) STRELKA2_CORES=$OPTARG ;;
         V) VARSCAN2_CORES=$OPTARG ;;
         Lq) LOFREQ_CORES=$OPTARG ;;
+        F) SOMATICSEQ_CORES=$OPTARG ;;
         h) usage ;;
         \?) printf "Error: Illegal option: -%s\n" "$OPTARG" >&2
             usage
@@ -120,6 +129,43 @@ then
     exit 1
 fi
 
+## Validate optional file arguments if not empty
+if [ ! -z "$INTERVALS_BED" ] && [ ! -f "$INTERVALS_BED" ]
+then
+    echo "Intervals BED file $INTERVALS_BED specified but does not exist."
+    exit 1
+fi
+
+if [ ! -z "$DBSNP_FILE" ] && [ ! -f "$DBSNP_FILE" ]
+then
+    echo "dbSNP VCF file $DBSNP_FILE specified but does not exist."
+    exit 1
+fi
+
+if [ ! -z "$COSMIC_FILE" ] && [ ! -f "$COSMIC_FILE" ]
+then
+    echo "COSMIC VCF file $COSMIC_FILE specified but does not exist."
+    exit 1
+fi
+
+if [ ! -z "$GERMLINE_RESOURCE" ] && [ ! -f "$GERMLINE_RESOURCE" ]
+then
+    echo "Germline resource VCF file $GERMLINE_RESOURCE for Mutect2 specified but does not exist."
+    exit 1
+fi
+
+if [ ! -z "$PON_FILE" ] && [ ! -f "$PON_FILE" ]
+then
+    echo "PoN VCF file $PON_FILE for Mutect2 specified but does not exist."
+    exit 1
+fi
+
+if [ ! -z "$BIALLELIC_VCF" ] && [ ! -f "$BIALLELIC_VCF" ]
+then
+    echo "Biallelic VCF file $BIALLELIC_VCF for Mutect2 specified but does not exist."
+    exit 1
+fi
+
 ## Define subject ID if not specified
 if [ -z "$SUBJECT_ID" ]; then
     SUBJECT_ID=$(basename "${TUMOR_BAM%.*}")
@@ -129,6 +175,9 @@ fi
 TUMOR_ID=$(basename "${TUMOR_BAM%.*}")
 NORMAL_ID=$(basename "${NORMAL_BAM%.*}")
 
+## Define path to config file
+CONFIG_FILE="$OUTPUT_DIR/config_${SUBJECT_ID}.yaml"
+
 echo "Generating temporary configuration file: $CONFIG_FILE"
 cat > "$CONFIG_FILE" << EOF
 # Configuration generated for subject: $SUBJECT_ID
@@ -137,6 +186,9 @@ reference_genome: "$REF_GENOME"
 outputdir: "$OUTPUT_DIR"
 tmpdir: "$TMP_DIR"
 subject_id: "$SUBJECT_ID"
+intervals_bed: "$INTERVALS_BED"
+dbsnp_resource: "$DBSNP_FILE"
+cosmic_resource: "$COSMIC_FILE"
 
 rule_cores:
     mutect2: $MUTECT2_CORES
@@ -144,7 +196,7 @@ rule_cores:
     strelka2: $STRELKA2_CORES
     varscan2: $VARSCAN2_CORES
     lofreq: $LOFREQ_CORES
-
+    somaticseq: $SOMATICSEQ_CORES
 
 sample_data:
     tumor_bam_path: "$TUMOR_BAM"
@@ -152,10 +204,11 @@ sample_data:
     tumor_sample_id: "$TUMOR_ID"
     normal_sample_id: "$NORMAL_ID"
 
+
 mutect2_params:
-    intervals_bed: "$INTERVALS_BED"
     germline_resource: "$GERMLINE_RESOURCE"
     panel_of_normals: "$PON_FILE"
+
 
 filter_mutect2_params:
     biallelic_resource: "$BIALLELIC_VCF"
@@ -165,23 +218,24 @@ SCRIPT=$(readlink -f "$0")
 export ENSEMBLESOMASEEKER=$(dirname "$SCRIPT")
 
 # Final VCF for the single subject ID
-TARGET_VCF="$OUTPUT_DIR/mutect2_filtered/${SUBJECT_ID}_filtered.vcf.gz"
+TARGET_SNV_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sSNV.vcf"
+TARGET_INDEL_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sINDEL.vcf"
 
 echo "Running snakemake pipeline:"
-command="snakemake $TARGET_VCF \
+command="snakemake $TARGET_SNV_VCF $TARGET_INDEL_VCF \
     --use-conda --conda-prefix $ENSEMBLESOMASEEKER/envs/conda \
-    --cores 1 --configfile $CONFIG \
+    --cores 1 --configfile $CONFIG_FILE \
     --snakefile $ENSEMBLESOMASEEKER/Snakefile -p"
 
 echo -e $command
 
 eval $command
 
-
-# --- 3. Cleanup ---
-
-# Clean up the single generated config file
+# Clean up the config file
 rm "$CONFIG_FILE"
 
-echo "Pipeline finished for $SUBJECT_ID. Output VCF: $TARGET_VCF"
+echo "EnsembleSomaSeeker finished for $SUBJECT_ID."
+echo " Somatic SNVs: $TARGET_SNV_VCF"
+echo " Somatic INDELs: $TARGET_INDEL_VCF"
+
 exit 0

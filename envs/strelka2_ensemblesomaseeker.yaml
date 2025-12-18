@@ -1,0 +1,6 @@
+name: strelka2_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - strelka=2.9.10=hdfd78af_2
