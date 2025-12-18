@@ -3,4 +3,4 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - muse=2.1.2=h8a3fdc4_1
+  - muse=2.1.2

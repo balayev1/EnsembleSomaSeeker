@@ -3,5 +3,6 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - lofreq=2.1.5=py39hf2bf078_8
-  - samtools=1.22=h96c455f_0
+  - lofreq=2.1.5
+  - samtools=1.22
+  - python=3.12
