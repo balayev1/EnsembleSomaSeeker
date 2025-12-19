@@ -31,5 +31,5 @@ bash EnsembleSomaSeeker.sh \
     -o test/ \
     -b data/common_all_biallelic.vcf.gz \
     -M 8 \
-    -Sn 8
+    -j 1
 ```

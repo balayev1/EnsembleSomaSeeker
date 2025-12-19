@@ -69,9 +69,12 @@ rule filter_mutect2:
         segmentation_table = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_segments.table"),
         read_orientation_table = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}.artifact_prior_tables.tar.gz"),
         filtered_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
+    params:
+        # Define the directory here to avoid the quote error in shell
+        out_dir = f"{config['outputdir']}/mutect2_filtered"
     shell:
-        """       
-        mkdir -p {config['outputdir']}/mutect2_filtered
+        """        
+        mkdir -p {params.out_dir}
 
         gatk GetPileupSummaries \
             -I {input.tumor_bam} \
