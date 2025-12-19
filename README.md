@@ -4,32 +4,25 @@ EnsembleSomaSeeker is a somatic mutation calling pipeline that uses BAM/SAM/CRAM
 
 ## Setup
 Clone repository:
-``` 
+```bash 
 git clone git@github.com:balayev1/EnsembleSomaSeeker.git 
 ```
 Change path to EnsembleSomaSeeker repository:
-```
+```bash
 cd EnsembleSomaSeeker
 ```
-To implement the test run, you have to download reference genome fasta [fasta file](https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/GRCh38.primary_assembly.genome.fa.gz) and decompress it (3GB in size).
-```
-# Download
-wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_49/GRCh38.primary_assembly.genome.fa.gz -P data/
 
-# Decompress the file
-gzip -d data/GRCh38.primary_assembly.genome.fa.gz 
-```
-
-Now, we are ready for test run:
-``` 
+## Usage
+EnsembleSomaSeeker can now be executed using simple command in your terminal:
+```bash
 bash EnsembleSomaSeeker.sh \
-    -t test/SRR14097759_sorted_MD_BQ_chr1_1000000.bam \
-    -n test/SRR14097760_sorted_MD_BQ_chr1_1000000.bam \
-    -T SRR14097759 \
-    -N SRR14097760 \
-    -R data/GRCh38.primary_assembly.genome.fa \
-    -o test/ \
-    -b data/common_all_biallelic.vcf.gz \
-    -M 8 \
-    -j 4
+    -t [path/to/tumor.bam] \
+    -n [path/to/normal.bam] \
+    -T [tumor_id] \
+    -N [normal_id] \
+    -R [path/to/reference_fasta] \
+    -o [output_dir] \
+    -b [path/to/biallelic.vcf]
 ```
+
+**Warning:** You must have dictionary and index files of reference fasta in `.dict` and `.fai` formats within same directory of your fasta file. VCF file with biallelic SNPs is also required for filtering part of Mutect2. Please check `data` folder to see contents of each file. 
