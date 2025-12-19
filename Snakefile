@@ -208,7 +208,7 @@ rule varscan2:
         """
 
 # MUSE RULE
-rule muse:
+checkpoint muse:
     conda:
         "envs/muse_ensemblesomaseeker.yaml"
     threads:
@@ -218,7 +218,6 @@ rule muse:
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
     output:
-        muse_txt = temp(f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.txt"),
         target_vcf = f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf"
     params:
         out_dir = f"{config['outputdir']}/muse",
@@ -229,19 +228,21 @@ rule muse:
         """
         mkdir -p {params.out_dir}
 
-        MuSE call \
-            -f {input.ref} \
-            -O {params.prefix} \
-            -n {threads} \
-            {input.tumor_bam} \
-            {input.normal_bam}
-
-        MuSE sump \
-            -I {params.prefix}.MuSE.txt \
-            -O {output.target_vcf} \
-            -G \
-            -n {threads} \
-            {params.dbsnp}
+        (
+            {params.muse_bin} call \
+                -f {input.ref} \
+                -O {params.prefix} \
+                -n {threads} \
+                {input.tumor_bam} \
+                {input.normal_bam} && \
+            
+            {params.muse_bin} sump \
+                -I {params.prefix}.MuSE.txt \
+                -O {output.target_vcf} \
+                -G \
+                -n {threads} \
+                {params.dbsnp}
+        ) || (echo "MuSE failed, creating empty recovery file" && touch {output.target_vcf})
         """
 
 # LOFREQ RULE
@@ -302,6 +303,28 @@ rule lofreq:
             {params.optional_args}
         """
 
+# Define input VCFs for merging in SomaticSeq
+def get_somaticseq_inputs(wildcards):
+    muse_vcf = checkpoints.muse.get(**wildcards).output.target_vcf
+    
+    inputs = {
+        "mutect2_vcf": f"{config['outputdir']}/mutect2_filtered/{wildcards.subject_id}_filtered.vcf.gz",
+        "strelka2_snvs": f"{config['outputdir']}/strelka2/{wildcards.subject_id}/results/variants/somatic.snvs.vcf.gz",
+        "strelka2_indels": f"{config['outputdir']}/strelka2/{wildcards.subject_id}/results/variants/somatic.indels.vcf.gz",
+        "varscan2_snvs": f"{config['outputdir']}/varscan2/{wildcards.subject_id}.snp.vcf",
+        "varscan2_indels": f"{config['outputdir']}/varscan2/{wildcards.subject_id}.indel.vcf",
+        "lofreq_snvs": f"{config['outputdir']}/lofreq/{wildcards.subject_id}_somatic_final.snvs.vcf.gz",
+        "lofreq_indels": f"{config['outputdir']}/lofreq/{wildcards.subject_id}_somatic_final.indels.vcf.gz",
+    }
+    
+    import os
+    if os.path.exists(muse_vcf) and os.path.getsize(muse_vcf) > 0:
+        inputs["muse_vcf"] = muse_vcf
+    else:
+        inputs["muse_vcf"] = None 
+        
+    return inputs
+
 # SOMATICSEQ RULE
 rule somaticseq:
     conda:
@@ -309,17 +332,10 @@ rule somaticseq:
     threads:
         config['rule_cores'].get('somaticseq', 2)
     input: 
+        unpack(get_somaticseq_inputs),
         ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
-        mutect2_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
-        strelka2_snvs = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.snvs.vcf.gz",
-        strelka2_indels = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.indels.vcf.gz",
-        varscan2_snvs = f"{config['outputdir']}/varscan2/{config['subject_id']}.snp.vcf",
-        varscan2_indels = f"{config['outputdir']}/varscan2/{config['subject_id']}.indel.vcf",
-        muse_vcf = f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf",
-        lofreq_snvs = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.snvs.vcf.gz",
-        lofreq_indels = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.indels.vcf.gz",
     output:
         snvs_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sSNV.vcf",
         indels_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sINDEL.vcf",
@@ -327,6 +343,7 @@ rule somaticseq:
         indels_tsv = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Ensemble.sINDEL.tsv",
     params:
         prefix = f"{config['outputdir']}/somaticseq/{config['subject_id']}",
+        muse_arg = lambda wildcards, input: f"--muse-vcf {input.muse_vcf}" if hasattr(input, 'muse_vcf') and input.muse_vcf else ""
         optional_args = (
             (f" --inclusion-region {config.get('intervals_bed')}" 
             if config.get('intervals_bed') else "") +
@@ -345,7 +362,7 @@ rule somaticseq:
             --mutect2-vcf {input.mutect2_vcf} \
             --varscan-snv {input.varscan2_snvs} \
             --varscan-indel {input.varscan2_indels} \
-            --muse-vcf {input.muse_vcf} \
+            {params.muse_arg} \
             --lofreq-snv {input.lofreq_snvs} \
             --lofreq-indel {input.lofreq_indels} \
             --strelka-snv {input.strelka2_snvs} \
