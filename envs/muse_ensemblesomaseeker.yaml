@@ -4,6 +4,3 @@ channels:
   - bioconda
 dependencies:
   - muse=2.1.2
-  - libgcc-ng=9.3.0
-  - libstdcxx-ng=9.3.0
-  - ncurses=6.2
