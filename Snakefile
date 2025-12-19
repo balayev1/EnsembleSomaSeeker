@@ -1,27 +1,23 @@
 import os
 
 """
-Snakefile to identify somatic SNVs and INDELs in single subject/patient 
+Snakefile to identify somatic SNVs and INDELs in single subject/patient
 in tumor-normal pair mode with fault-tolerant MuSE execution.
 """
-
-rule all:
-    input:
-        f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sSNV.vcf"
 
 # MUTECT2
 rule mutect2:
     conda: "envs/mutect2_ensemblesomaseeker.yaml"
     threads: config['rule_cores'].get('mutect2', 2)
     input:
-        ref = config["reference_genome"],
+	ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
     output:
-        unfiltered_vcf = f"{config['outputdir']}/mutect2/{config['subject_id']}_unfiltered.vcf.gz",
+	unfiltered_vcf = f"{config['outputdir']}/mutect2/{config['subject_id']}_unfiltered.vcf.gz",
         f1r2 = f"{config['outputdir']}/mutect2/{config['subject_id']}.f1r2.tar.gz",
     params:
-        out_dir = f"{config['outputdir']}/mutect2",
+	out_dir = f"{config['outputdir']}/mutect2",
         tumor_id = config["sample_data"]["tumor_sample_id"],
         normal_id = config["sample_data"]["normal_sample_id"],
         optional_args = (
@@ -31,8 +27,8 @@ rule mutect2:
             (f" --tmp-dir {config.get('tmpdir')}" if config.get('tmpdir') else "")
         )
     shell:
-        """        
-        mkdir -p {params.out_dir}
+	"""
+	mkdir -p {params.out_dir}
         gatk Mutect2 -R {input.ref} -I {input.tumor_bam} -tumor {params.tumor_id} \
             -I {input.normal_bam} -normal {params.normal_id} -O {output.unfiltered_vcf} \
             --f1r2-tar-gz {output.f1r2} --native-pair-hmm-threads {threads} \
@@ -43,24 +39,24 @@ rule mutect2:
 rule filter_mutect2:
     conda: "envs/mutect2_ensemblesomaseeker.yaml"
     input:
-        ref = config["reference_genome"],
+	ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
         unfiltered_vcf = f"{config['outputdir']}/mutect2/{config['subject_id']}_unfiltered.vcf.gz",
         biallelic_resource = config['filter_mutect2_params']['biallelic_resource'],
         f1r2 = f"{config['outputdir']}/mutect2/{config['subject_id']}.f1r2.tar.gz",
     output:
-        tumor_pileup = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_tumor.pileups.table"),
+	tumor_pileup = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_tumor.pileups.table"),
         normal_pileup = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_normal.pileups.table"),
         contamination_table = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_contamination.table"),
         segmentation_table = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_segments.table"),
         read_orientation_table = temp(f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}.artifact_prior_tables.tar.gz"),
         filtered_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
     params:
-        out_dir = f"{config['outputdir']}/mutect2_filtered"
+	out_dir = f"{config['outputdir']}/mutect2_filtered"
     shell:
-        """        
-        mkdir -p {params.out_dir}
+	"""
+	mkdir -p {params.out_dir}
         gatk GetPileupSummaries -I {input.tumor_bam} -L {input.biallelic_resource} -V {input.biallelic_resource} -O {output.tumor_pileup}
         gatk GetPileupSummaries -I {input.normal_bam} -L {input.biallelic_resource} -V {input.biallelic_resource} -O {output.normal_pileup}
         gatk CalculateContamination -I {output.tumor_pileup} --matched-normal {output.normal_pileup} -O {output.contamination_table} --tumor-segmentation {output.segmentation_table}
@@ -74,11 +70,11 @@ rule prepare_strelka_bed:
     conda: "envs/bcftools_ensemblesomaseeker.yaml"
     input: bed = config.get("intervals_bed", "")
     output:
-        gz = f"{config['outputdir']}/strelka2/intervals.bed.gz",
+	gz = f"{config['outputdir']}/strelka2/intervals.bed.gz",
         tbi = f"{config['outputdir']}/strelka2/intervals.bed.gz.tbi"
     shell:
-        """
-        mkdir -p {config['outputdir']}/strelka2
+	"""
+	mkdir -p {config['outputdir']}/strelka2
         if [[ "{input.bed}" == *.gz ]]; then cp {input.bed} {output.gz}; else bgzip -c {input.bed} > {output.gz}; fi
         tabix -f -p bed {output.gz}
         """
@@ -88,19 +84,19 @@ rule strelka2:
     conda: "envs/strelka2_ensemblesomaseeker.yaml"
     threads: config['rule_cores'].get('strelka2', 2)
     input:
-        ref = config["reference_genome"],
+	ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
         prepared_bed = (f"{config['outputdir']}/strelka2/intervals.bed.gz" if config.get("intervals_bed") else []),
     output:
-        snvs = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.snvs.vcf.gz",
+	snvs = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.snvs.vcf.gz",
         indels = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.indels.vcf.gz",
         run_dir = directory(f"{config['outputdir']}/strelka2/{config['subject_id']}"),
     params:
-        optional_args = (f" --callRegions {config['outputdir']}/strelka2/intervals.bed.gz" if config.get("intervals_bed") else "")
+	optional_args = (f" --callRegions {config['outputdir']}/strelka2/intervals.bed.gz" if config.get("intervals_bed") else "")
     shell:
-        """        
-        rm -rf {output.run_dir}
+	"""
+	rm -rf {output.run_dir}
         mkdir -p {output.run_dir}
         configureStrelkaSomaticWorkflow.py --tumorBam {input.tumor_bam} --normalBam {input.normal_bam} \
             --referenceFasta {input.ref} --runDir {output.run_dir} {params.optional_args}
@@ -117,7 +113,7 @@ rule varscan2:
         normal_bam = config["sample_data"]["normal_bam_path"],
     output:
         snvs = f"{config['outputdir']}/varscan2/{config['subject_id']}.snp.vcf",
-        indels = f"{config['outputdir']}/varscan2/{config['subject_id']}.indel.vcf",
+	indels = f"{config['outputdir']}/varscan2/{config['subject_id']}.indel.vcf",
     params:
         out_dir = f"{config['outputdir']}/varscan2",
         prefix = f"{config['outputdir']}/varscan2/{config['subject_id']}",
@@ -126,7 +122,7 @@ rule varscan2:
         """
         mkdir -p {params.out_dir}
         samtools mpileup --no-BAQ --min-MQ 1 -f {input.ref} {params.optional_args} {input.normal_bam} {input.tumor_bam} | \
-        varscan somatic - {params.prefix} --mpileup 1 --min-coverage 1 --min-var-freq 0.001 --output-vcf 1
+	varscan somatic - {params.prefix} --mpileup 1 --min-coverage 1 --min-var-freq 0.001 --output-vcf 1
         """
 
 # MUSE
@@ -138,49 +134,63 @@ rule muse:
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
     output:
-        target_vcf = {config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf,
+        target_vcf = f"{config['outputdir']}/muse/{config['subject_id']}.MuSE.vcf",
     params:
-        prefix = f"{config['outputdir']}/muse/{config['subject_id']}/{config['subject_id']}",
+	out_dir = f"{config['outputdir']}/muse",
+        prefix = f"{config['outputdir']}/muse/{config['subject_id']}",
         dbsnp = (f" -D {config.get('dbsnp_resource')}" if config.get('dbsnp_resource') else "")
     shell:
-        """
-        mkdir -p {config['outputdir']}/muse
+	"""
+	mkdir -p {params.out_dir}
+
         MuSE call -f {input.ref} -O {params.prefix} -n {threads} {input.tumor_bam} {input.normal_bam}
-        MuSE sump -I {params.prefix}.MuSE.txt -O {output.target_vcf} -G -n {threads} {params.dbsnp}
+
+        MuSE sump -I {params.prefix}.MuSE.txt -O {output.target_vcf} -G -n {threads} {params.dbsnp} || touch {output.target_vcf}
         """
 
 # LOFREQ
 rule lofreq:
     conda: "envs/lofreq_ensemblesomaseeker.yaml"
     threads: config['rule_cores'].get('lofreq', 2)
-    input: 
-        ref = config["reference_genome"],
+    input:
+	ref = config["reference_genome"],
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
     output:
-        snvs = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.snvs.vcf.gz",
+	snvs = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.snvs.vcf.gz",
         indels = f"{config['outputdir']}/lofreq/{config['subject_id']}_somatic_final.indels.vcf.gz",
     params:
-        out_dir = f"{config['outputdir']}/lofreq",
+	out_dir = f"{config['outputdir']}/lofreq",
         prefix = f"{config['outputdir']}/lofreq/{config['subject_id']}_",
         optional_args = (
             (f" --bed {config.get('intervals_bed')}" if config.get('intervals_bed') else "") +
             (f" --dbsnp {config.get('dbsnp_resource')}" if config.get('dbsnp_resource') else "")
         )
     shell:
-        """        
-        mkdir -p {params.out_dir}
-        lofreq somatic --normal {input.normal_bam} --tumor {input.tumor_bam} \
+	"""
+	mkdir -p {params.out_dir}
+        lofreq indelqual --dindel --ref {input.ref} --out {params.prefix}normal_BD_BI.bam {input.normal_bam}
+
+        lofreq indelqual --dindel --ref {input.ref} --out {params.prefix}tumor_BD_BI.bam {input.tumor_bam}
+
+        samtools index -o {params.prefix}normal_BD_BI.bam.bai {params.prefix}normal_BD_BI.bam
+
+        samtools index -o {params.prefix}tumor_BD_BI.bam.bai {params.prefix}tumor_BD_BI.bam
+
+        lofreq somatic --normal {params.prefix}normal_BD_BI.bam --tumor {params.prefix}tumor_BD_BI.bam \
             --outprefix {params.prefix} --ref {input.ref} --threads {threads} \
             --call-indels --min-cov 7 {params.optional_args}
+
+        rm {params.prefix}normal_BD_BI.bam {params.prefix}normal_BD_BI.bam.bai
+        rm {params.prefix}tumor_BD_BI.bam {params.prefix}tumor_BD_BI.bam.bai
         """
 
 # SOMATICSEQ
 rule somaticseq:
     conda: "envs/somaticseq_ensemblesomaseeker.yaml"
     threads: config['rule_cores'].get('somaticseq', 2)
-    input: 
-        mutect2_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
+    input:
+	mutect2_vcf = f"{config['outputdir']}/mutect2_filtered/{config['subject_id']}_filtered.vcf.gz",
         strelka2_snvs = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.snvs.vcf.gz",
         strelka2_indels = f"{config['outputdir']}/strelka2/{config['subject_id']}/results/variants/somatic.indels.vcf.gz",
         varscan2_snvs = f"{config['outputdir']}/varscan2/{config['subject_id']}.snp.vcf",
@@ -192,19 +202,18 @@ rule somaticseq:
         tumor_bam = config["sample_data"]["tumor_bam_path"],
         normal_bam = config["sample_data"]["normal_bam_path"],
     output:
-        snvs_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sSNV.vcf",
+	snvs_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sSNV.vcf",
         indels_vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.sINDEL.vcf",
     params:
-        prefix = f"{config['outputdir']}/somaticseq/{config['subject_id']}",
-        muse_arg = lambda wildcards, input: f"--muse-vcf {input.muse_vcf}" if hasattr(input, 'muse_vcf') and input.muse_vcf else "",
+	prefix = f"{config['outputdir']}/somaticseq/{config['subject_id']}",
         optional_args = (
             (f" --inclusion-region {config.get('intervals_bed')}" if config.get('intervals_bed') else "") +
             (f" --dbsnp-vcf {config.get('dbsnp_resource')}" if config.get('dbsnp_resource') else "") +
             (f" --cosmic-vcf {config.get('cosmic_resource')}" if config.get('cosmic_resource') else "")
         )
     shell:
-        """
-        mkdir -p {params.prefix}
+    """
+    mkdir -p {params.prefix}
         somaticseq_parallel.py paired \
             --tumor-bam-file {input.tumor_bam} --normal-bam-file {input.normal_bam} \
             --mutect2-vcf {input.mutect2_vcf} \
