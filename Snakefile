@@ -70,11 +70,13 @@ rule prepare_strelka_bed:
     conda: "envs/bcftools_ensemblesomaseeker.yaml"
     input: bed = config.get("intervals_bed", "")
     output:
-        gz = f"{config['outputdir']}/strelka2/intervals.bed.gz",
+	gz = f"{config['outputdir']}/strelka2/intervals.bed.gz",
         tbi = f"{config['outputdir']}/strelka2/intervals.bed.gz.tbi"
+    params:
+	outdir = config["outputdir"]
     shell:
-        """
-        mkdir -p {config['outputdir']}/strelka2
+	"""
+	mkdir -p {params.outdir}/strelka2
         if [[ "{input.bed}" == *.gz ]]; then cp {input.bed} {output.gz}; else bgzip -c {input.bed} > {output.gz}; fi
         tabix -f -p bed {output.gz}
         """
