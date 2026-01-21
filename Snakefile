@@ -211,13 +211,22 @@ rule somaticseq:
     shell:
         """
         mkdir -p {params.prefix}
-        somaticseq_parallel.py paired \
-            --tumor-bam-file {input.tumor_bam} --normal-bam-file {input.normal_bam} \
+        somaticseq_parallel.py \
+            --output-directory {params.prefix} \
+            --genome-reference {input.ref} \
+            --threads {threads} \
+            --pass-threshold 0.5 \
+            --lowqual-threshold 0.1 \
+            {params.optional_args} \
+        paired \
+            --tumor-bam-file {input.tumor_bam} \
+            --normal-bam-file {input.normal_bam} \
             --mutect2-vcf {input.mutect2_vcf} \
-            --varscan-snv {input.varscan2_snvs} --varscan-indel {input.varscan2_indels} \
-            --lofreq-snv {input.lofreq_snvs} --lofreq-indel {input.lofreq_indels} \
-            --strelka-snv {input.strelka2_snvs} --strelka-indel {input.strelka2_indels} \
-            --muse-vcf {input.muse_vcf} \
-            --output-directory {params.prefix} --genome-reference {input.ref} \
-            --threads {threads} --pass-threshold 0.5 --lowqual-threshold 0.1 {params.optional_args}
+            --varscan-snv {input.varscan2_snvs} \
+            --varscan-indel {input.varscan2_indels} \
+            --lofreq-snv {input.lofreq_snvs} \
+            --lofreq-indel {input.lofreq_indels} \
+            --strelka-snv {input.strelka2_snvs} \
+            --strelka-indel {input.strelka2_indels} \
+            --muse-vcf {input.muse_vcf}
         """
