@@ -17,7 +17,8 @@ usage() {
     echo "  -g <file>  : Path to Germline resource VCF file (used only for Mutect2)."
     echo "  -p <file>  : Path to Panel of Normals (PoN) VCF file (used only for Mutect2)."
     echo "  -P <file>  : Path to high-confidence PoN VCF file for variant exclusion (e.g. 1000G PoN see GATK resource bundle)."
-    echo "  -G <file>  : Path to Germline mutations VCF from Normal BAM file for variant exclusion."
+    echo "  -G <file>  : Path to Germline SNV VCF from Normal BAM file for variant exclusion."
+    echo "  -H <file>  : Path to Germline INDEL VCF from Normal BAM file for variant exclusion."
     echo "  -s <file>  : Path to dbSNP VCF file."
     echo "  -v <file>  : Path to COSMIC VCF file (used only for SomaticSeq)."
     echo "  -d <dir>   : Temporary directory to use."
@@ -62,7 +63,8 @@ INTERVALS_BED=""
 GERMLINE_RESOURCE=""
 PON_FILE=""
 HC_VCF=""
-GERMLINE_SAMPLE_VCF=""
+GERMLINE_SNV_VCF=""
+GERMLINE_INDEL_VCF=""
 DBSNP_FILE=""
 COSMIC_FILE=""
 TMP_DIR=""
@@ -87,7 +89,7 @@ MIN_CALLERS=2
 
 ## Updated getopts string to match the CASE logic below
 # Removed 'c', 'm', 'k', 'q', 'f' and replaced with 'C', 'M', 'K', 'Q', 'F'
-while getopts ":t:n:T:N:R:o:b:L:g:p:P:G:s:v:d:S:j:C:M:K:V:Q:F:A:B:E:I:J:X:Y:Z:W:U:h" option; do
+while getopts ":t:n:T:N:R:o:b:L:g:p:P:G:H:s:v:d:S:j:C:M:K:V:Q:F:A:B:E:I:J:X:Y:Z:W:U:h" option; do
     case "$option" in
         t) TUMOR_BAM=$OPTARG ;;
         n) NORMAL_BAM=$OPTARG ;;
@@ -100,7 +102,8 @@ while getopts ":t:n:T:N:R:o:b:L:g:p:P:G:s:v:d:S:j:C:M:K:V:Q:F:A:B:E:I:J:X:Y:Z:W:
         g) GERMLINE_RESOURCE=$OPTARG ;;
         p) PON_FILE=$OPTARG ;;
         P) HC_VCF=$OPTARG ;;
-        G) GERMLINE_SAMPLE_VCF=$OPTARG ;;
+        G) GERMLINE_SNV_VCF=$OPTARG ;;
+        H) GERMLINE_INDEL_VCF=$OPTARG ;;
         s) DBSNP_FILE=$OPTARG ;;
         v) COSMIC_FILE=$OPTARG ;;
         d) TMP_DIR=$OPTARG ;;
@@ -254,7 +257,8 @@ intervals_bed: "$INTERVALS_BED"
 dbsnp_resource: "$DBSNP_FILE"
 cosmic_resource: "$COSMIC_FILE"
 hc_pon: "$HC_VCF"
-germline_sample_resource: "$GERMLINE_SAMPLE_VCF"
+germline_snv_resource: "$GERMLINE_SNV_VCF"
+germline_indel_resource: "$GERMLINE_INDEL_VCF"
 
 rule_cores:
     mutect2: $MUTECT2_CORES
