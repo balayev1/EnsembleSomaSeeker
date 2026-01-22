@@ -230,3 +230,52 @@ rule somaticseq:
             --strelka-indel {input.strelka2_indels} \
             --muse-vcf {input.muse_vcf}
         """
+
+def get_resource_filter(wildcards):
+    """Dynamically builds normalization and exclusion commands for optional resources."""
+    cmd = ""
+    ref = config['reference_genome']
+    
+    # Process substitution <() performs normalization in memory
+    if config['mutect2_params'].get('panel_of_normals'):
+        cmd += f" | bcftools view -T ^<(bcftools norm -m-both -f {ref} {config['mutect2_params'].get('panel_of_normals')})"
+    
+    if config.get("hc_pon"):
+        cmd += f" | bcftools view -T ^<(bcftools norm -m-both -f {ref} {config['hc_pon']})"
+    
+    if config.get("germline_sample_resource"):
+        cmd += f" | bcftools view -T ^<(bcftools norm -m-both -f {ref} {config['germline_sample_resource']})"
+        
+    return cmd
+
+# FINAL FILTERING
+rule final_filter_somaticseq:
+    conda: "envs/bcftools.yaml"
+    input:
+        vcf = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Consensus.s{{type}}.vcf",
+        tsv = f"{config['outputdir']}/somaticseq/{config['subject_id']}/Ensemble.s{{type}}.tsv",
+        ref = config["reference_genome"]
+    output:
+        final_vcf = f"{config['outputdir']}/final_vcf/{config['subject_id']}_somatic_{{type}}.vcf.gz",
+        tbi = f"{config['outputdir']}/final_vcf/{config['subject_id']}_somatic_{{type}}.vcf.gz.tbi"
+    params:
+        f = config["variant_exclusion_params"],
+        excl = get_resource_filter,
+        script = os.path.join(workflow.basedir, "R", "filter_somaticseq.R")
+    shell:
+        """
+        # Hard filters
+        Rscript {params.script} {input.vcf} {input.tsv} {input.vcf}.tmp \
+        {params.f[n_dp]} {params.f[t_dp]} {params.f[t_af]} {params.f[n_af]} \
+        {params.f[t_conc]} {params.f[n_conc]} {params.f[mq]} {params.f[bq]} \
+        {params.f[t_alt_mq]} {params.f[min_callers]}
+
+        # Left-align sample AND subtract normalized resources
+        bcftools norm -m-both -f {input.ref} {input.vcf}.tmp \
+        {params.excl} \
+        -Oz -o {output.final_vcf}
+
+        # Index with tabix
+        tabix -p vcf {output.final_vcf}
+        rm {input.vcf}.tmp
+        """

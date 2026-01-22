@@ -16,6 +16,8 @@ usage() {
     echo "  -L <file>  : Path to BED file of coordinates over which to operate."
     echo "  -g <file>  : Path to Germline resource VCF file (used only for Mutect2)."
     echo "  -p <file>  : Path to Panel of Normals (PoN) VCF file (used only for Mutect2)."
+    echo "  -P <file>  : Path to high-confidence PoN VCF file for variant exclusion (e.g. 1000G PoN see GATK resource bundle)."
+    echo "  -G <file>  : Path to Germline mutations VCF from Normal BAM file for variant exclusion."
     echo "  -s <file>  : Path to dbSNP VCF file."
     echo "  -v <file>  : Path to COSMIC VCF file (used only for SomaticSeq)."
     echo "  -d <dir>   : Temporary directory to use."
@@ -27,6 +29,16 @@ usage() {
     echo "  -V <int>   : Cores for VarScan2 [default: 1]."
     echo "  -Q <int>   : Cores for Lofreq [default: 1]."
     echo "  -F <int>   : Cores for SomaticSeq [default: 1]."
+    echo "  -A <int>   : Min normal depth for variant exclusion [default: 10]"
+    echo "  -B <int>   : Min tumor depth for variant exclusion [default: 15]"
+    echo "  -E <float> : Min tumor allele frequency for variant exclusion [default: 0.05]"
+    echo "  -I <float> : Max normal allele frequency for variant exclusion [default: 0.02]"
+    echo "  -J <int>   : Min tumor ALT concordant reads for variant exclusion [default: 5]"
+    echo "  -X <int>   : Max normal ALT concordant reads for variant exclusion [default: 2]"
+    echo "  -Y <int>   : Min mean mapping quality for variant exclusion [default: 23]"
+    echo "  -Z <int>   : Min mean base quality for variant exclusion [default: 23]"
+    echo "  -W <int>   : Min tumor ALT mapping quality for variant exclusion [default: 30]"
+    echo "  -U <int>.  : Min number of supporting callers for variant exclusion [default: 2]"
     echo "  -h         : Show help text."
     exit 1
 }
@@ -49,6 +61,8 @@ BIALLELIC_VCF=""
 INTERVALS_BED=""
 GERMLINE_RESOURCE=""
 PON_FILE=""
+HC_VCF=""
+GERMLINE_SAMPLE_VCF=""
 DBSNP_FILE=""
 COSMIC_FILE=""
 TMP_DIR=""
@@ -60,10 +74,20 @@ STRELKA2_CORES=1
 VARSCAN2_CORES=1
 LOFREQ_CORES=1
 SOMATICSEQ_CORES=1
+MIN_N_DP=10
+MIN_T_DP=15
+MIN_T_AF=0.05
+MAX_N_AF=0.02
+MIN_T_CONC=5
+MAX_N_CONC=2
+MIN_MQ=23
+MIN_BQ=23
+MIN_T_ALT_MQ=30
+MIN_CALLERS=2
 
 ## Updated getopts string to match the CASE logic below
 # Removed 'c', 'm', 'k', 'q', 'f' and replaced with 'C', 'M', 'K', 'Q', 'F'
-while getopts ":t:n:T:N:R:o:b:L:g:p:s:v:d:S:j:C:M:K:V:Q:F:h" option; do
+while getopts ":t:n:T:N:R:o:b:L:g:p:P:G:s:v:d:S:j:C:M:K:V:Q:F:A:B:E:I:J:X:Y:Z:W:U:h" option; do
     case "$option" in
         t) TUMOR_BAM=$OPTARG ;;
         n) NORMAL_BAM=$OPTARG ;;
@@ -75,6 +99,8 @@ while getopts ":t:n:T:N:R:o:b:L:g:p:s:v:d:S:j:C:M:K:V:Q:F:h" option; do
         L) INTERVALS_BED=$OPTARG ;;
         g) GERMLINE_RESOURCE=$OPTARG ;;
         p) PON_FILE=$OPTARG ;;
+        P) HC_VCF=$OPTARG ;;
+        G) GERMLINE_SAMPLE_VCF=$OPTARG ;;
         s) DBSNP_FILE=$OPTARG ;;
         v) COSMIC_FILE=$OPTARG ;;
         d) TMP_DIR=$OPTARG ;;
@@ -86,6 +112,16 @@ while getopts ":t:n:T:N:R:o:b:L:g:p:s:v:d:S:j:C:M:K:V:Q:F:h" option; do
         V) VARSCAN2_CORES=$OPTARG ;;
         Q) LOFREQ_CORES=$OPTARG ;;
         F) SOMATICSEQ_CORES=$OPTARG ;;
+        A) MIN_N_DP=$OPTARG ;;
+        B) MIN_T_DP=$OPTARG ;;
+        E) MIN_T_AF=$OPTARG ;;
+        I) MAX_N_AF=$OPTARG ;;
+        J) MIN_T_CONC=$OPTARG ;;
+        X) MAX_N_CONC=$OPTARG ;;
+        Y) MIN_MQ=$OPTARG ;;
+        Z) MIN_BQ=$OPTARG ;;
+        W) MIN_T_ALT_MQ=$OPTARG ;;
+        U) MIN_CALLERS=$OPTARG ;;
         h) usage ;;
         \?) printf "Error: Illegal option: -%s\n" "$OPTARG" >&2
             usage
@@ -217,6 +253,8 @@ subject_id: "$SUBJECT_ID"
 intervals_bed: "$INTERVALS_BED"
 dbsnp_resource: "$DBSNP_FILE"
 cosmic_resource: "$COSMIC_FILE"
+hc_pon: "$HC_VCF"
+germline_sample_resource: "$GERMLINE_SAMPLE_VCF"
 
 rule_cores:
     mutect2: $MUTECT2_CORES
@@ -240,11 +278,23 @@ mutect2_params:
 
 filter_mutect2_params:
     biallelic_resource: "$BIALLELIC_VCF"
+
+variant_exclusion_params:
+    n_dp: $MIN_N_DP
+    t_dp: $MIN_T_DP
+    t_af: $MIN_T_AF
+    n_af: $MAX_N_AF
+    t_conc: $MIN_T_CONC
+    n_conc: $MAX_N_CONC
+    mq: $MIN_MQ
+    bq: $MIN_BQ
+    t_alt_mq: $MIN_T_ALT_MQ
+    min_callers: $MIN_CALLERS
 EOF
 
 # Final VCFs for subject ID
-TARGET_SNV_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sSNV.vcf"
-TARGET_INDEL_VCF="${OUTPUT_DIR}/somaticseq/${SUBJECT_ID}/Consensus.sINDEL.vcf"
+TARGET_SNV_VCF="${OUTPUT_DIR}/final_vcf/${SUBJECT_ID}_somatic_SNV.vcf.gz"
+TARGET_INDEL_VCF="${OUTPUT_DIR}/final_vcf/${SUBJECT_ID}_somatic_INDEL.vcf.gz"
 
 echo "Running snakemake pipeline:"
 command="snakemake $TARGET_SNV_VCF $TARGET_INDEL_VCF \

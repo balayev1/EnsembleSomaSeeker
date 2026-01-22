@@ -1,10 +1,14 @@
+#!/usr/bin/env R
 
 library(dplyr)
 
+args <- commandArgs(trailingOnly = TRUE)
+# args[1:3] are files; args[4:13] are thresholds
+
 # Snakemake objects
-tsv_path <- snakemake@input[["tsv"]]
-vcf_in   <- snakemake@input[["vcf"]]
-vcf_out  <- snakemake@output[["filtered_vcf"]]
+tsv_path <- args[2]
+vcf_in   <- args[1]
+vcf_out  <- args[3]
 
 # Load TSV
 tsv <- read.table(tsv_path, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
@@ -20,10 +24,10 @@ tsv$n_afalt <- (tsv$N_ALT_FOR + tsv$N_ALT_REV) / tsv$n_dp
 # Apply Hard Filters + Caller Consensus (NumCallers >= 2)
 tsv$NumCallers <- rowSums(tsv[, c("if_MuTect", "if_Strelka", "if_VarScan2", "if_LoFreq", "MuSE_Tier")], na.rm = TRUE)
 filtered_tsv <- tsv %>% filter(
-    n_dp > 10 & t_dp > 15 & t_afalt > 0.05 & n_afalt < 0.02 & 
-    tBAM_ALT_Concordant >= 5 & nBAM_ALT_Concordant < 2 &
-    mq >= 23 & bq >= 23 & tBAM_ALT_MQ >= 30 &
-    NumCallers >= 2)
+    n_dp > args[4] & t_dp > args[5] & t_afalt > args[6] & n_afalt < args[7] & 
+    tBAM_ALT_Concordant >= args[8] & nBAM_ALT_Concordant < args[9] &
+    mq >= args[10] & bq >= args[11] & tBAM_ALT_MQ >= args[12] &
+    NumCallers >= args[13])
 
 # Create a list of positions to keep (CHROM_POS_REF_ALT)
 keep_sites <- paste(filtered_tsv$CHROM, filtered_tsv$POS, filtered_tsv$REF, filtered_tsv$ALT, sep = "_")
